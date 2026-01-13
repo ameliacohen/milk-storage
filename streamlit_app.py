@@ -1,6 +1,6 @@
 import streamlit as st
 
-st.title("🎈 My new app")
-st.write(
-    "Let's start building! For help and inspiration, head over to [docs.streamlit.io](https://docs.streamlit.io/)."
-)
+st.set_page_config(page_title="Milk Tracker", page_icon="🍼")
+
+st.title("🍼 Milk Storage Tracker")
+st.write("If you see this, you are coding in the right place ✅")
