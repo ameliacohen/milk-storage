@@ -87,7 +87,7 @@ st.divider()
 # ------------------ Add bag form ------------------
 # Default time = "now" when you open the app, and after each successful add.
 if "add_time" not in st.session_state:
-    st.session_state["add_time"] = datetime.now().time().replace(second=0, microsecond=0)
+    st.session_state["add_time"] = datetime.now(LOCAL_TZ).time().replace(second=0, microsecond=0)
 
 with st.expander("➕ Add a bag", expanded=True):
     with st.form("add_bag_form", clear_on_submit=True):
