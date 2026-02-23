@@ -29,6 +29,9 @@ LOCATIONS = [
 LOC_LABEL = {k: v for k, v in LOCATIONS}
 LOC_KEYS = [k for k, _ in LOCATIONS]
 
+LOCAL_TZ = ZoneInfo("America/Los_Angeles")
+UTC_TZ = ZoneInfo("UTC")
+
 # ------------------ DB helpers ------------------
 def fetch_bags(location: str):
     res = (
@@ -48,7 +51,7 @@ def add_bag(location: str, dt_utc_iso: str, oz: float):
     ).execute()
 
 def set_used(bag_id: int, used: bool):
-    payload = {"used": used, "used_at": datetime.now(tz=tz.UTC).isoformat() if used else None}
+    payload = {"used": used, "used_at": datetime.now(UTC_TZ).isoformat() if used else None}
     sb().table("bags").update(payload).eq("id", bag_id).execute()
 
 def delete_bag(bag_id: int):
@@ -100,7 +103,7 @@ with st.expander("➕ Add a bag", expanded=True):
 
         if st.form_submit_button("Add bag"):
             dt_local = datetime.combine(d, t).replace(tzinfo=LOCAL_TZ)
-            dt_utc = dt_local.astimezone(tz.UTC)
+            dt_utc = dt_local.astimezone(UTC_TZ)
             add_bag(location, dt_utc.isoformat(), float(oz))
 
             # Reset time to now so the next add defaults to current time
