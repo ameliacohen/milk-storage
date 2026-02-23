@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, date
 import streamlit as st
-from dateutil import tz
+from zoneinfo import ZoneInfo
 from supabase import create_client
 
 # ------------------ Setup ------------------
@@ -19,7 +19,7 @@ if not url or not key:
 def sb():
     return create_client(url, key)
 
-LOCAL_TZ = tz.tzlocal()
+LOCAL_TZ = ZoneInfo("America/Los_Angeles")
 
 LOCATIONS = [
     ("fridge", "🧊 Fridge"),
