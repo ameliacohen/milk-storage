@@ -107,7 +107,7 @@ with st.expander("➕ Add a bag", expanded=True):
             add_bag(location, dt_utc.isoformat(), float(oz))
 
             # Reset time to now so the next add defaults to current time
-            st.session_state["add_time"] = datetime.now().time().replace(second=0, microsecond=0)
+            st.session_state["add_time"] = datetime.now(LOCAL_TZ).time().replace(second=0, microsecond=0)
 
             st.success("Added!")
             st.rerun()
