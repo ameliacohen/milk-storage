@@ -87,17 +87,12 @@ def daily_totals():
         day = dt.date()
 
         if day not in by_day:
-            by_day[day] = {"total": 0.0, "used": 0.0, "unused": 0.0}
+            by_day[day] = 0.0
 
-        oz = float(b["oz"])
-        by_day[day]["total"] += oz
+        by_day[day] += float(b["oz"])  # total only
 
-        if b["used"]:
-            by_day[day]["used"] += oz
-        else:
-            by_day[day]["unused"] += oz
-
-    return sorted(by_day.items(), reverse=True)
+    # sort oldest → newest for chart
+    return sorted(by_day.items())
 
 # ------------------ Totals ------------------
 total_unused = totals_unused()
@@ -108,22 +103,7 @@ c2.metric("Total (unused oz)", f"{total_unused:.1f}")
 
 st.divider()
 
-# ------------------ Daily Tracker ------------------
-st.subheader("📊 Daily Totals")
 
-daily = daily_totals()
-
-if not daily:
-    st.caption("No data yet.")
-else:
-    for day, vals in daily:
-        cols = st.columns(4)
-        cols[0].markdown(f"**{day}**")
-        cols[1].metric("Total", f"{vals['total']:.1f} oz")
-        cols[2].metric("Used", f"{vals['used']:.1f} oz")
-        cols[3].metric("Unused", f"{vals['unused']:.1f} oz")
-
-st.divider()
 
 # ------------------ Add bag form ------------------
 if "add_time" not in st.session_state:
@@ -194,5 +174,20 @@ def render_section(container, location: str):
                     st.rerun()
 
 render_section(st, "freezer")
+
+st.divider()
+st.subheader("📊 Milk Added Per Day")
+
+daily = daily_totals()
+
+if not daily:
+    st.caption("No data yet.")
+else:
+    chart_data = {
+        "Day": [str(day) for day, _ in daily],
+        "Ounces": [total for _, total in daily],
+    }
+
+    st.bar_chart(chart_data, x="Day", y="Ounces")
 
 st.caption("Used bags are tucked away to reduce clutter.")
