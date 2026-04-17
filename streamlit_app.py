@@ -20,17 +20,13 @@ def sb():
     return create_client(url, key)
 
 LOCAL_TZ = ZoneInfo("America/Los_Angeles")
+UTC_TZ = ZoneInfo("UTC")
 
 LOCATIONS = [
-    ("fridge", "🧊 Fridge"),
     ("freezer", "🥶 Freezer"),
-    ("on_the_go", "🚗 On-the-go"),
 ]
 LOC_LABEL = {k: v for k, v in LOCATIONS}
 LOC_KEYS = [k for k, _ in LOCATIONS]
-
-LOCAL_TZ = ZoneInfo("America/Los_Angeles")
-UTC_TZ = ZoneInfo("UTC")
 
 # ------------------ DB helpers ------------------
 def fetch_bags(location: str):
@@ -41,6 +37,16 @@ def fetch_bags(location: str):
         .eq("location", location)
         .order("dt", desc=True)
         .order("id", desc=True)
+        .execute()
+    )
+    return res.data or []
+
+def fetch_all_bags():
+    res = (
+        sb()
+        .table("bags")
+        .select("id, location, dt, oz, used")
+        .order("dt", desc=True)
         .execute()
     )
     return res.data or []
@@ -68,27 +74,58 @@ def fmt_dt(dt_str: str) -> str:
         return dt_str
 
 def totals_unused():
-    totals = {}
-    grand = 0.0
-    for loc in LOC_KEYS:
-        rows = fetch_bags(loc)
-        loc_total = sum(float(b["oz"]) for b in rows if not b["used"])
-        totals[loc] = loc_total
-        grand += loc_total
-    return totals, grand
+    rows = fetch_bags("freezer")
+    total = sum(float(b["oz"]) for b in rows if not b["used"])
+    return total
+
+def daily_totals():
+    rows = fetch_all_bags()
+    by_day = {}
+
+    for b in rows:
+        dt = datetime.fromisoformat(b["dt"].replace("Z", "+00:00")).astimezone(LOCAL_TZ)
+        day = dt.date()
+
+        if day not in by_day:
+            by_day[day] = {"total": 0.0, "used": 0.0, "unused": 0.0}
+
+        oz = float(b["oz"])
+        by_day[day]["total"] += oz
+
+        if b["used"]:
+            by_day[day]["used"] += oz
+        else:
+            by_day[day]["unused"] += oz
+
+    return sorted(by_day.items(), reverse=True)
 
 # ------------------ Totals ------------------
-totals, grand_total = totals_unused()
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("Fridge (unused oz)", f"{totals['fridge']:.1f}")
-c2.metric("Freezer (unused oz)", f"{totals['freezer']:.1f}")
-c3.metric("On-the-go (unused oz)", f"{totals['on_the_go']:.1f}")
-c4.metric("Total (unused oz)", f"{grand_total:.1f}")
+total_unused = totals_unused()
+
+c1, c2 = st.columns(2)
+c1.metric("Freezer (unused oz)", f"{total_unused:.1f}")
+c2.metric("Total (unused oz)", f"{total_unused:.1f}")
+
+st.divider()
+
+# ------------------ Daily Tracker ------------------
+st.subheader("📊 Daily Totals")
+
+daily = daily_totals()
+
+if not daily:
+    st.caption("No data yet.")
+else:
+    for day, vals in daily:
+        cols = st.columns(4)
+        cols[0].markdown(f"**{day}**")
+        cols[1].metric("Total", f"{vals['total']:.1f} oz")
+        cols[2].metric("Used", f"{vals['used']:.1f} oz")
+        cols[3].metric("Unused", f"{vals['unused']:.1f} oz")
 
 st.divider()
 
 # ------------------ Add bag form ------------------
-# Default time = "now" when you open the app, and after each successful add.
 if "add_time" not in st.session_state:
     st.session_state["add_time"] = datetime.now(LOCAL_TZ).time().replace(second=0, microsecond=0)
 
@@ -106,7 +143,6 @@ with st.expander("➕ Add a bag", expanded=True):
             dt_utc = dt_local.astimezone(UTC_TZ)
             add_bag(location, dt_utc.isoformat(), float(oz))
 
-            # Reset time to now so the next add defaults to current time
             st.session_state["add_time"] = datetime.now(LOCAL_TZ).time().replace(second=0, microsecond=0)
 
             st.success("Added!")
@@ -114,49 +150,33 @@ with st.expander("➕ Add a bag", expanded=True):
 
 st.divider()
 
-# ------------------ Sections ------------------
-cols = st.columns(3)
-
+# ------------------ Freezer Section ------------------
 def render_section(container, location: str):
     container.subheader(LOC_LABEL[location])
     rows = fetch_bags(location)
+
     unused = [b for b in rows if not b["used"]]
     used = [b for b in rows if b["used"]]
 
-    # Unused first (visible)
     if not unused:
-        container.caption("No unused bags here.")
+        container.caption("No unused bags.")
     else:
         for b in unused:
             bag_id = b["id"]
             label = f"{fmt_dt(b['dt'])} • {float(b['oz']):.1f} oz"
 
-            c = container.columns([4.8, 1.9, 1.4, 1.2])
-            c[0].markdown(f"**{label}**")
+            col1, col2, col3 = container.columns([5, 1.2, 1.2])
 
-            # Move control: pick destination + click Move
-            dest = c[1].selectbox(
-                "Move to",
-                LOC_KEYS,
-                index=LOC_KEYS.index(b["location"]),
-                format_func=lambda k: LOC_LABEL[k],
-                key=f"move_sel_{bag_id}",
-                label_visibility="collapsed",
-            )
-            if dest != b["location"]:
-                if c[1].button("Move", key=f"move_btn_{bag_id}"):
-                    move_bag(bag_id, dest)
-                    st.rerun()
+            col1.markdown(f"**{label}**")
 
-            if c[2].button("Used", key=f"use_{bag_id}"):
+            if col2.button("Use", key=f"use_{bag_id}"):
                 set_used(bag_id, True)
                 st.rerun()
 
-            if c[3].button("Delete", key=f"del_{bag_id}"):
+            if col3.button("Delete", key=f"del_{bag_id}"):
                 delete_bag(bag_id)
                 st.rerun()
 
-    # Used section (hidden by default to reduce clutter)
     with container.expander(f"Used bags ({len(used)})", expanded=False):
         if not used:
             st.caption("None used yet.")
@@ -164,29 +184,15 @@ def render_section(container, location: str):
             for b in used:
                 bag_id = b["id"]
                 label = f"{fmt_dt(b['dt'])} • {float(b['oz']):.1f} oz"
-                c = st.columns([5.2, 1.6, 1.2])
 
-                c[0].markdown(f"✅ **{label}**")
+                col1, col2 = st.columns([5, 1.2])
 
-                dest = c[1].selectbox(
-                    "Move to",
-                    LOC_KEYS,
-                    index=LOC_KEYS.index(b["location"]),
-                    format_func=lambda k: LOC_LABEL[k],
-                    key=f"move_used_sel_{bag_id}",
-                    label_visibility="collapsed",
-                )
-                if dest != b["location"]:
-                    if c[1].button("Move", key=f"move_used_btn_{bag_id}"):
-                        move_bag(bag_id, dest)
-                        st.rerun()
+                col1.markdown(f"✅ **{label}**")
 
-                if c[2].button("Undo", key=f"undo_{bag_id}"):
+                if col2.button("Undo", key=f"undo_{bag_id}"):
                     set_used(bag_id, False)
                     st.rerun()
 
-render_section(cols[0], "fridge")
-render_section(cols[1], "freezer")
-render_section(cols[2], "on_the_go")
+render_section(st, "freezer")
 
-st.caption("Backed by Supabase. Used bags are tucked away to reduce clutter.")
+st.caption("Used bags are tucked away to reduce clutter.")
